@@ -24,15 +24,15 @@ namespace vsklamm
 		template <typename FunctionT>
 		function(FunctionT f)
 		{
-			if (/* check for space */ std::is_nothrow_move_constructible<FunctionT>::value 
+			if (std::is_nothrow_move_constructible<FunctionT>::value 
 				&& sizeof(function_holder<FunctionT>) <= small_object_size)
 			{
-				new (&small_object) function_holder<FunctionT>(std::move(f));
+				new (&small_object_) function_holder<FunctionT>(std::move(f));
 				is_small_ = true;
 			}
 			else
 			{
-				new (&small_object) std::unique_ptr<function_holder_base>(std::make_unique<function_holder<FunctionT>>(std::move(f)));
+				new (&small_object_) std::unique_ptr<function_holder_base>(std::make_unique<function_holder<FunctionT>>(std::move(f)));
 				is_small_ = false;
 			}
 		}
@@ -41,7 +41,7 @@ namespace vsklamm
 		{
 			if (other.is_small_)
 			{
-				(reinterpret_cast<const function_holder_base *>(&other.small_object))->small_copy(&small_object);
+				(reinterpret_cast<const function_holder_base *>(&other.small_object_))->small_copy(&small_object_);
 			}
 			else
 			{
@@ -54,14 +54,14 @@ namespace vsklamm
 		{
 			if (other.is_small_)
 			{
-				auto o = reinterpret_cast<function_holder_base *>(&other.small_object);
-				o->small_move(&small_object);
+				auto o = reinterpret_cast<function_holder_base *>(&other.small_object_);
+				o->small_move(&small_object_);
 				o->~function_holder_base();
-				new (&other.small_object) std::unique_ptr<function_holder_base>(nullptr);
+				new (&other.small_object_) std::unique_ptr<function_holder_base>(nullptr);
 			}
 			else
 			{
-				new (&small_object) std::unique_ptr<function_holder_base>(std::move(other.f_pointer_));
+				new (&small_object_) std::unique_ptr<function_holder_base>(std::move(other.f_pointer_));
 			}
 			is_small_ = other.is_small_;
 			other.is_small_ = false;
@@ -79,14 +79,14 @@ namespace vsklamm
 			destroy();
 			if (other.is_small_)
 			{
-				auto o = reinterpret_cast<function_holder_base *>(&other.small_object);
-				o->small_move(&small_object);
+				auto o = reinterpret_cast<function_holder_base *>(&other.small_object_);
+				o->small_move(&small_object_);
 				o->~function_holder_base();
-				new (&other.small_object) std::unique_ptr<function_holder_base>(nullptr);
+				new (&other.small_object_) std::unique_ptr<function_holder_base>(nullptr);
 			}
 			else
 			{
-				new (&small_object) std::unique_ptr<function_holder_base>(std::move(other.f_pointer_));
+				new (&small_object_) std::unique_ptr<function_holder_base>(std::move(other.f_pointer_));
 			}
 			is_small_ = other.is_small_;
 			other.is_small_ = false;
@@ -97,7 +97,7 @@ namespace vsklamm
 		{
 			if (is_small_)
 			{
-				return reinterpret_cast<function_holder_base *>(&small_object)->invoke(std::forward<Args>(args)...);
+				return reinterpret_cast<function_holder_base *>(&small_object_)->invoke(std::forward<Args>(args)...);
 			}
 			return f_pointer_->invoke(std::forward<Args>(args)...);
 		}
@@ -168,13 +168,6 @@ namespace vsklamm
 				new (address) function_holder<FunctionType>(std::move(function_object_));
 			}
 
-			void * get_aligned_ptr(char * address) override
-			{
-				void * p = reinterpret_cast<void *>(address);
-				size_t space = small_object_size;
-				return std::align(alignof(function_holder<FunctionType>), sizeof(function_holder<FunctionType>), p, space);
-			}
-
 		private:
 			FunctionType function_object_;
 		};
@@ -183,7 +176,7 @@ namespace vsklamm
 		{
 			if (is_small_)
 			{
-				(reinterpret_cast<function_holder_base *>(&small_object))->~function_holder_base();
+				(reinterpret_cast<function_holder_base *>(&small_object_))->~function_holder_base();
 			}
 			else
 			{
@@ -194,7 +187,7 @@ namespace vsklamm
 		union
 		{
 			f_pointer_t f_pointer_;
-			mutable small_object_t small_object;			
+			mutable small_object_t small_object_;			
 		};
 
 		bool is_small_;
