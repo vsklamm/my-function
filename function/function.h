@@ -5,6 +5,7 @@
 namespace vsklamm
 {
 	constexpr size_t small_object_size = 32;
+	constexpr size_t small_object_align = 32;
 
 	template <typename Signature>
 	struct function;
@@ -13,17 +14,18 @@ namespace vsklamm
 	struct function <ReturnType(Args...)>
 	{
 
-		function() noexcept : f_pointer_(nullptr), aligned_ptr(raw_object), is_small_(false) {}
+		using small_object_t = std::aligned_storage_t<small_object_size, small_object_align>;
 
-		function(std::nullptr_t) noexcept : f_pointer_(nullptr), aligned_ptr(raw_object), is_small_(false) {}
+		function() noexcept : f_pointer_(nullptr), aligned_ptr(small_object), is_small_(false) {}
+
+		function(std::nullptr_t) noexcept : f_pointer_(nullptr), aligned_ptr(small_object), is_small_(false) {}
 
 		template <typename FunctionT>
 		function(FunctionT f)
 		{
-			// -sanitize=address, undefined
-			aligned_ptr = raw_object;		
+			aligned_ptr = small_object;		
 
-			void * p = reinterpret_cast<void *>(raw_object);
+			void * p = reinterpret_cast<void *>(small_object);
 			size_t space = small_object_size;
 			std::align(alignof(function_holder<FunctionT>), sizeof(function_holder<FunctionT>), p, space);
 
@@ -45,13 +47,13 @@ namespace vsklamm
 			if (other.is_small_)
 			{
 				auto o = reinterpret_cast<const function_holder_base *>(other.aligned_ptr);
-				auto p = o->get_aligned_ptr(raw_object);
+				auto p = o->get_aligned_ptr(small_object);
 				aligned_ptr = reinterpret_cast<char *>(p);
 				o->small_copy(aligned_ptr);
 			}
 			else
 			{
-				aligned_ptr = raw_object;
+				aligned_ptr = small_object;
 				f_pointer_ = other.f_pointer_->clone();
 			}
 			is_small_ = other.is_small_;
@@ -62,7 +64,7 @@ namespace vsklamm
 			if (other.is_small_)
 			{
 				auto o = reinterpret_cast<function_holder_base *>(other.aligned_ptr);
-				auto p = o->get_aligned_ptr(raw_object);
+				auto p = o->get_aligned_ptr(small_object);
 				aligned_ptr = reinterpret_cast<char *>(p);
 				o->small_move(aligned_ptr);
 				o->~function_holder_base();
@@ -70,7 +72,7 @@ namespace vsklamm
 			}
 			else
 			{
-				aligned_ptr = raw_object;
+				aligned_ptr = small_object;
 				new (aligned_ptr) std::unique_ptr<function_holder_base>(std::move(other.f_pointer_));
 			}
 			is_small_ = other.is_small_;
@@ -189,8 +191,6 @@ namespace vsklamm
 			FunctionType function_object_;
 		};
 
-	private:
-
 		void destroy()
 		{
 			if (is_small_)
@@ -212,8 +212,10 @@ namespace vsklamm
 		union
 		{
 			f_pointer_t f_pointer_;
-			mutable char raw_object[small_object_size];
+			// mutable small_object_t small_object;
+			mutable char small_object[small_object_size];
 		};
+
 		char * aligned_ptr;
 		bool is_small_;
 	};
